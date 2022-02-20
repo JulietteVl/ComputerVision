@@ -39,15 +39,17 @@ def box3d(n):
 def get_distorted(r, distortion_coefficients):
     """Return p(1 + dr(p))."""
     k3, k5, k7 = distortion_coefficients
-    n = r[0, :] ** 2 + r[1, :] ** 2
+    n = np.sqrt(r[0, :] ** 2 + r[1, :] ** 2)
     dr = k3 * n ** 2 + k5 * n ** 4 + k7 * n ** 6
-    return r * (1 + dr)
+    r[:2, :] = r[:2, :] * (1 + dr)
+    return r
 
 
 def projectpoints(K, R, t, Q, distortion_coeff=[0, 0, 0]):
     """Return the projected points as a 2xn matrix."""
-    _, n = Q.shape
-    Q = np.vstack([Q, np.ones(n)])
+    d, n = Q.shape
+    if d == 3:
+        Q = np.vstack([Q, np.ones(n)])
     T = np.vstack([np.hstack([R, t])])
 
     r = T @ Q
@@ -57,7 +59,50 @@ def projectpoints(K, R, t, Q, distortion_coeff=[0, 0, 0]):
     return P
 
 
-def hest(q1, q2):
+def undistortImage(Image, K, distortion_coeff):
+    """
+    Parameters
+    ----------
+    Image:
+        image
+    K:
+        camera matrix
+    distortion_coeff:
+        distortion coefficients
+
+    Return
+    ------
+    An undistorted version of the image
+    """
+    h, w, d = Image.shape
+    
+    grid = np.ones([h * w, 3], dtype=int)
+    columns, rows = np.meshgrid(np.arange(0, w), np.arange(0, h))
+    grid[:, 0], grid[:, 1] = rows.flatten(), columns.flatten()
+
+    grid = np.linalg.inv(K) @ grid.T
+    grid /= grid[2]
+    
+    grid = get_distorted(grid, distortion_coeff)
+    grid = (K @ grid).T
+    grid = grid.reshape(h, w, 3)[:, :, :2].astype(int)
+    
+    points = (np.arange(0, h), np.arange(0, w))
+    I_undistorted = np.zeros(Image.shape)
+    for i in range(d):
+        I = Image[:, :, i]
+        interpolating_function = RegularGridInterpolator(
+            points,
+            values=I,
+            method="nearest",
+            bounds_error=False,
+            fill_value=0
+        )
+        I_undistorted[:, :, i] = interpolating_function(grid)
+    return I_undistorted.astype(int)
+
+
+def hest(q_before_H, q_after_H):
     """
     Parameters
     ----------
@@ -68,11 +113,13 @@ def hest(q1, q2):
     H: 3x3 numpy array
         Estimated homography matrix using the linear algorithm.
     """
+    T1, q1 = normalize2d(q_after_H)
+    T2, q2 = normalize2d(q_before_H)
     B = get_B(q1, q2)
-    U, S, VT = np.linalg.svd(B.T @ B)
-    H = np.reshape(VT[-1], (3, 3), 'F')
+    u, s, vh = np.linalg.svd(B)
+    H = np.reshape(vh[-1, :], (3, 3), 'F')
+    H = np.linalg.inv(T1) @ H @ T2
     return H / H[2, 2]
-
 
 def get_B(q1, q2):
     """
@@ -86,7 +133,6 @@ def get_B(q1, q2):
         B = np.vstack((B, B_i(q1, q2, i)))
     return B
 
-
 def B_i(q1, q2, i):
     return np.kron(
             q2[:,i],
@@ -99,7 +145,7 @@ def B_i(q1, q2, i):
 
 
 def normalize2d(Q):
-    """Return the points normalised.
+    """Return the normalisation matrix and the normalised points.
 
     The mean of Tq is [0, 0] and the standard deviation is [1, 1].
 
@@ -125,4 +171,4 @@ def normalize2d(Q):
         [0         , 0,            1               ],
     ])
     TQ = T @ Q
-    return TQ / TQ[2]
+    return T, TQ / TQ[2]
