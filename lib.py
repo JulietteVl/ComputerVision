@@ -283,35 +283,6 @@ def DrawLine(l, shape, ax):
     P = [in_frame(l_im) for l_im in lines if in_frame(l_im) is not None]
     ax.plot(*np.array(P).T, 'r-')
 
-    
-def click_and_draw(im, im2, F, reverse_axis=False):
-    # Turn off the matplotlib inline to use ginput.
-    %matplotlib qt  
-    n = 1
-
-    plt.imshow(im)
-    x = np.array(plt.ginput(n))
-    plt.show()
-
-    q1 = np.hstack(
-        (x, np.ones((1, n)))
-        ).T
-    l2 = F @ q1
-    
-    %matplotlib inline
-    
-    i, j = 0, 1
-    if reverse_axis:
-        i, j = j, i
-
-    fig, ax = plt.subplots(1, 2, figsize=(20, 20))
-    ax[i].imshow(im1, 'gray')
-    ax[j].imshow(im2, 'gray')
-    ax[i].plot(x[:, 0], x[:, 1], 'ro')
-    DrawLine(l2, im2.shape, ax[j])
-    
-    plt.plot()
-
 
 def triangulate(q, P):
     """
