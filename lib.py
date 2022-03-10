@@ -311,3 +311,137 @@ def triangulate(q, P):
     u, s, vh = np.linalg.svd(B)
     Q = vh[-1, :]
     return Q[:3].reshape(3, 1) / Q[3]
+
+
+# week 4
+def checkerboard_points(n, m):
+    """Return the inhomogeneous 3D points of a checkerboard."""
+    return np.array([
+        [i - (n - 1) / 2 for j in range(m) for i in range(n)],
+        [j - (m - 1) / 2 for j in range(m) for i in range(n)],
+        np.zeros(n * m),
+    ])
+
+
+def estimateHomographies(Q_omega, qs):
+    """Return homographies that map from Q_omega to each of the entries in qs.
+    
+    Parameters
+    ----------
+    Q_omega: numpy array
+        original un-transformed checkerboard points in 3D.
+    qs: list of arrays
+        each element in the list containing Q_omega projected to the image
+        plane from different views.
+    
+    Return
+    ------
+    list of 3 x 3 arrays
+        homographies
+        
+    """
+    m = [0, 1, 3]
+    return [hest(Q_omega[m, :], qs[i]) for i in range(len(qs))]
+
+
+def estimate_b(Hs):
+    """Return the estimate of the b matrix.
+    
+    Parameters
+    ----------
+    Hs: list of 3 x 3 arrays
+        homographies
+    """
+    n = len(Hs)
+    V = np.zeros((2 * n, 6))
+
+    for i in range(n):
+        V[2 * i: 2 * i + 2] = np.array([
+            get_v(0, 1, Hs[i]),
+            get_v(0, 0, Hs[i]) - get_v(1, 1, Hs[i])
+        ])
+    u, s, vh = np.linalg.svd(V)
+    b = vh[-1]
+    return b
+    
+
+def get_v(alpha, beta, H):
+    return np.array([
+        H[0, alpha] * H[0, beta],
+        H[0, alpha] * H[1, beta] + H[1, alpha] * H[0, beta],
+        H[1, alpha] * H[1, beta],
+        H[2, alpha] * H[0, beta] + H[0, alpha] * H[2, beta],
+        H[2, alpha] * H[1, beta] + H[1, alpha] * H[2, beta],
+        H[2, alpha] * H[2, beta],
+    ])
+
+
+def estimateIntrinsics(Hs):
+    """Return the camera matrix given a list of homographies.
+    
+    Parameters
+    ----------
+    Hs: list of 3 x 3 numpy arrays
+        homographies
+
+    Return
+    ------
+    A: 3 x 3 numpy array
+        Camera matrix
+    """
+    b = estimate_b(Hs)
+#     B = np.array([
+#         [b[0], b[1], b[3]],
+#         [b[1], b[2], b[4]],
+#         [b[3], b[4], b[5]],
+#     ])
+
+    term1 = b[1] * b[3] - b[0] * b[4]
+    term2 = b[0] * b[2] - b[1] ** 2
+
+    v0 = term1 / term2
+    lambda_ = b[5] - (b[3] ** 2 + v0 * term1) / b[0]
+    alpha = np.sqrt(lambda_ / b[0])
+    beta = np.sqrt(lambda_ * b[0] / term2)
+    gamma = -b[1] * alpha ** 2 * beta / lambda_
+    u0 = gamma * v0 / beta - b[3] * alpha ** 2 / lambda_
+    
+    A = np.array([
+        [alpha, gamma, u0],
+        [0    , beta , v0],
+        [0    , 0    , 1 ],
+    ])
+    return A
+
+
+def estimateExtrinsics(K, Hs):
+    """Return the extrinsic parameters of the camera."""
+    Rs = []
+    ts = []
+    for H in Hs:
+        lambda_ = 1 / np.linalg.norm(np.linalg.inv(K) @ H[:, 0])
+        r0 = lambda_ * np.linalg.inv(K) @ H[:, 0]
+        r1 = lambda_ * np.linalg.inv(K) @ H[:, 1]
+        t  = lambda_ * np.linalg.inv(K) @ H[:, 2]
+
+        Rs.append(np.vstack((r0, r1, np.cross(r0, r1))).T)
+        ts.append(t.reshape(3, 1))
+    return Rs, ts
+
+def calibrateCamera(qs, Q):
+    """Return the intrisic and extrinsic parameters of a camera.
+    
+    Based on several view of a set of points.
+    
+    Parameters
+    ----------
+    qs: list of arrays
+        each element in the list containing Q projected to the image
+        plane from different views.
+    Q: numpy array
+        original un-transformed checkerboard points in 3D.
+    """
+    Hs = estimateHomographies(Q_omega=Q, qs=qs)
+    K = estimateIntrinsics(Hs)
+    Rs, ts = estimateExtrinsics(K, Hs)
+    return K, Rs, ts
