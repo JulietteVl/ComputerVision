@@ -3,6 +3,7 @@
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
+import scipy.ndimage
 
 # week 1
 def box3d(n):
@@ -428,6 +429,7 @@ def estimateExtrinsics(K, Hs):
         ts.append(t.reshape(3, 1))
     return Rs, ts
 
+
 def calibrateCamera(qs, Q):
     """Return the intrisic and extrinsic parameters of a camera.
     
@@ -445,3 +447,110 @@ def calibrateCamera(qs, Q):
     K = estimateIntrinsics(Hs)
     Rs, ts = estimateExtrinsics(K, Hs)
     return K, Rs, ts
+
+
+# week 5
+
+
+# week 6
+def gaussian1DKernels(sigma):
+    """Return the 1D gaussian kernel and its derivative.
+    
+    Parameters
+    ----------
+    sigma: float
+        variance
+    
+    Return
+    ------
+    g, gx: numpy arrays
+        gaussian kernel and its derivative
+    """
+    if sigma == 0:
+        return np.ones(1), np.array([1, -1])
+
+    h = np.ceil(5 * np.ceil(sigma))
+    x = np.arange(-h, h + 1)
+
+    g = np.exp(- x ** 2 / (2 * sigma ** 2))
+    g /= g.sum()
+    
+    gx = - x / sigma ** 2 * g
+
+    return g, gx
+
+
+def gaussianSmoothing(im, sigma):
+    """Return the gaussian smoothed image and gaussian smoothed derivatives.
+    
+    Parameters
+    ----------
+    im: numpy array
+        image
+    sigma: float
+        variance of the gaussian kernel
+    
+    Returns
+    -------
+    I: numpy array
+        Gaussian smoothed image of im
+    Ix, Iy: numpy arrays
+        Smoothed derivatives of the image
+    """
+    g, gx = gaussian1DKernel(sigma)
+    I = applyTwoFilters(im, g.reshape(1, -1), g.reshape(-1, 1))
+    Ix = applyTwoFilters(im, gx.reshape(1, -1), g.reshape(-1, 1))
+    Iy = applyTwoFilters(im, g.reshape(1, -1), gx.reshape(-1, 1))
+    return I, Ix, Iy
+
+
+def applyTwoFilters(I, g, h):
+    I = cv2.filter2D(I, -1,  g)
+    return cv2.filter2D(I, -1,  h)
+
+
+def smoothedHessian(im, sigma, epsilon):
+    """
+    Return the hessian of the images.
+    
+    Parameters
+    ----------
+    sigma, epsilon: int
+        width of the gaussian kernels
+    
+    Return
+    ------
+    C: float
+        smoothed hessian
+    """
+    _, Ix, Iy = gaussianSmoothing(im, sigma)
+    g_epsilon, _ = gaussian1DKernel(sigma)
+
+    a = cv2.filter2D(Ix ** 2, -1,  g_epsilon)
+    b = cv2.filter2D(Iy ** 2, -1,  g_epsilon)
+    c = cv2.filter2D(Ix * Iy, -1,  g_epsilon)
+    return np.array([
+        [a, c],
+        [c, b],
+    ])
+
+
+def harrisMeasure(im, sigma, epsilon, k):
+    """Return the harris measure."""
+    C = smoothedHessian(im, sigma, epsilon)
+    a, b, c = C[0, 0], C[1, 1], C[0, 1]
+    return a * b - c ** 2 - k * (a + b) ** 2
+
+
+def cornerDetector(im, sigma=1, epsilon=1, k=0.06, tau=5):
+    """Return corners coordinates in the image."""
+    r = harrisMeasure(im, sigma, epsilon, k)
+    local_max = np.zeros(im.shape, dtype=bool)
+    local_max[1:-1, 1:-1] = (
+          (r[1:-1, 1:-1] > r[1:-1, 2:  ]) 
+        & (r[1:-1, 1:-1] > r[1:-1,  :-2])
+        & (r[1:-1, 1:-1] > r[2:  , 1:-1])
+        & (r[1:-1, 1:-1] > r[ :-2, 1:-1])
+    )
+    r[~local_max] = 0
+    return np.argwhere(r > tau)
