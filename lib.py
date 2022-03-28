@@ -497,7 +497,7 @@ def gaussianSmoothing(im, sigma):
     Ix, Iy: numpy arrays
         Smoothed derivatives of the image
     """
-    g, gx = gaussian1DKernel(sigma)
+    g, gx = gaussian1DKernels(sigma)
     I = applyTwoFilters(im, g.reshape(1, -1), g.reshape(-1, 1))
     Ix = applyTwoFilters(im, gx.reshape(1, -1), g.reshape(-1, 1))
     Iy = applyTwoFilters(im, g.reshape(1, -1), gx.reshape(-1, 1))
