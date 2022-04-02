@@ -161,7 +161,7 @@ def normalize2d(Q):
     """
     d, n = Q.shape
     if d == 2:
-        Q = np.vstack(Q, np.ones(n))
+        Q = np.vstack((Q, np.ones(n)))
 
     mean = np.mean(Q, axis=1)
     std = np.std(Q, axis=1)
