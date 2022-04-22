@@ -5,6 +5,24 @@ import numpy as np
 import matplotlib.pyplot as plt
 import scipy.ndimage
 
+
+def PI(q):
+    """Return inhomogeneous coordinate of point or set of point"""
+    q = np.array(q)
+    n = q.shape[0]
+    q = q[:-1] / q[-1]
+    return q.reshape((n-1, -1))
+
+def homogeneous(p):
+    """Return homogeneous coordinate of point or set of points."""
+    try:
+        _, n = p.shape
+    except:
+        p.reshape(2, 1)
+        n = 1
+    return np.vstack((p, np.ones(n)))
+
+
 # week 1
 def box3d(n):
     """Generate a set of points: 3D cross in cube."""
@@ -103,7 +121,7 @@ def undistortImage(Image, K, distortion_coeff):
     return I_undistorted.astype(int)
 
 
-def hest(q_before_H, q_after_H):
+def hest(q_before_H, q_after_H, normalize_H=True):
     """
     Parameters
     ----------
@@ -120,7 +138,9 @@ def hest(q_before_H, q_after_H):
     u, s, vh = np.linalg.svd(B)
     H = np.reshape(vh[-1, :], (3, 3), 'F')
     H = np.linalg.inv(T1) @ H @ T2
-    return H / H[2, 2]
+    if normalize_H:
+        H /= H[2, 2]
+    return H
 
 def get_B(q1, q2):
     """
