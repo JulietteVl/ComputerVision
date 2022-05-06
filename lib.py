@@ -307,7 +307,7 @@ def DrawLine(l, shape, ax):
 
 def triangulate(q, P):
     """
-    Return the traingulation.
+    Return the triangulation.
     
     Parameters
     ----------
